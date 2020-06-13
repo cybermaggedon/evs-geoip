@@ -13,6 +13,7 @@ import (
 	"encoding/binary"
 	evs "github.com/cybermaggedon/evs-golang-api"
 	"github.com/oschwald/geoip2-golang"
+	"github.com/prometheus/client_golang/prometheus"
 	"log"
 	"net"
 	"os"
@@ -20,7 +21,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 const (
@@ -47,7 +47,7 @@ type GeoIP struct {
 
 	// Prometheus stats
 	match_cases *prometheus.CounterVec
-	countries *prometheus.CounterVec
+	countries   *prometheus.CounterVec
 }
 
 // Goroutine: GeoIP updater.  Periodically runs geoipupdate.
@@ -306,7 +306,7 @@ func (g *GeoIP) Event(ev *evs.Event, properties map[string]string) error {
 		}
 	}
 
-	g.match_cases.With(prometheus.Labels{ "case": c, }).Inc()
+	g.match_cases.With(prometheus.Labels{"case": c}).Inc()
 
 	if srcloc != nil && srcloc.Iso != "" {
 		g.countries.With(prometheus.Labels{
@@ -321,7 +321,6 @@ func (g *GeoIP) Event(ev *evs.Event, properties map[string]string) error {
 	}
 
 	g.OutputEvent(ev, properties)
-
 
 	return nil
 
