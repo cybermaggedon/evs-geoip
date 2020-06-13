@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 const (
@@ -43,6 +44,10 @@ type GeoIP struct {
 	// Notify channel, notifies analytic that GeoIP databases have been
 	// updated and should be reloaded
 	notif chan bool
+
+	// Prometheus stats
+	match_cases *prometheus.CounterVec
+	countries *prometheus.CounterVec
 }
 
 // Goroutine: GeoIP updater.  Periodically runs geoipupdate.
@@ -140,6 +145,21 @@ func (g *GeoIP) Init(binding string, outputs []string) error {
 	// Open databases.
 	g.openGeoIP()
 
+	g.match_cases = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "geo_matches",
+			Help: "Match cases",
+		}, []string{"case"})
+
+	g.countries = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "geo_country",
+			Help: "Identified countrie",
+		}, []string{"country"})
+
+	prometheus.MustRegister(g.match_cases)
+	prometheus.MustRegister(g.countries)
+
 	g.EventAnalytic.Init(binding, outputs, g)
 
 	return nil
@@ -220,8 +240,6 @@ func bytesToIp(b []byte) net.IP {
 // Event handler for new events.
 func (g *GeoIP) Event(ev *evs.Event, properties map[string]string) error {
 
-	log.Print("Event")
-
 	// If there's a signal from the GeoIP database updater, re-open the
 	// database.
 	select {
@@ -271,6 +289,35 @@ func (g *GeoIP) Event(ev *evs.Event, properties map[string]string) error {
 		if destloc != nil {
 			ev.Location.Dest = destloc
 		}
+	}
+
+	var c string
+	if srcloc == nil {
+		if destloc == nil {
+			c = "neither"
+		} else {
+			c = "dest"
+		}
+	} else {
+		if destloc == nil {
+			c = "src"
+		} else {
+			c = "both"
+		}
+	}
+
+	g.match_cases.With(prometheus.Labels{ "case": c, }).Inc()
+
+	if srcloc != nil && srcloc.Iso != "" {
+		g.countries.With(prometheus.Labels{
+			"country": srcloc.Iso,
+		}).Inc()
+	}
+
+	if destloc != nil && destloc.Iso != "" {
+		g.countries.With(prometheus.Labels{
+			"country": destloc.Iso,
+		}).Inc()
 	}
 
 	g.OutputEvent(ev, properties)

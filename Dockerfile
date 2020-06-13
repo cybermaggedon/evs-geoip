@@ -1,8 +1,6 @@
 
 FROM fedora:32
 
-ARG EVS_API=master
-
 RUN dnf install -y geoipupdate && \
     dnf clean all
 
@@ -13,7 +11,7 @@ COPY GeoLite2-ASN.mmdb /usr/local/share/
 
 WORKDIR /usr/local/share/
 
-ENV PULSAR_BROKER=pulsar://exchange
+ENV PULSAR_BROKER=pulsar://exchange:6650
 ENV METRICS_PORT=8088
 
 # MaxMinds licence key
