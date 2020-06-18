@@ -35,13 +35,12 @@ type GeoipConfig struct {
 
 func NewGeoipConfig() *GeoipConfig {
 	return &GeoipConfig{
-		Config: evs.NewConfig("evs-geoip", "cyberprobe"),
+		Config:       evs.NewConfig("evs-geoip", "cyberprobe"),
 		UpdatePeriod: defaultUpdatePeriod,
 	}
 }
 
 type Geoip struct {
-
 	*GeoipConfig
 
 	// Embed EventAnalytic framework
@@ -147,7 +146,7 @@ func (s *Geoip) openGeoIP() {
 // Initialisation
 func NewGeoip(gc *GeoipConfig) *Geoip {
 
-	g := &Geoip{ GeoipConfig: gc }
+	g := &Geoip{GeoipConfig: gc}
 
 	var err error
 	g.EventSubscriber, err = evs.NewEventSubscriber(g.Name, g.Input, g)
