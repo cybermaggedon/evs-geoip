@@ -29,15 +29,30 @@ const (
 )
 
 type GeoipConfig struct {
-	UpdatePeriod time.Duration
 	*evs.Config
+	UpdatePeriod      time.Duration
+	geoipCityFilename string
+	geoipASNFilename  string
 }
 
 func NewGeoipConfig() *GeoipConfig {
-	return &GeoipConfig{
+
+	c := &GeoipConfig{
 		Config:       evs.NewConfig("evs-geoip", "cyberprobe"),
 		UpdatePeriod: defaultUpdatePeriod,
 	}
+
+	// Database filenames are environment variables.
+	var ok bool
+	if c.geoipCityFilename, ok = os.LookupEnv("GEOIP_DB"); !ok {
+		c.geoipCityFilename = "GeoLite2-City.mmdb"
+	}
+	if c.geoipASNFilename, ok = os.LookupEnv("GEOIP_ASN_DB"); !ok {
+		c.geoipASNFilename = "GeoLite2-ASN.mmdb"
+	}
+
+	return c
+
 }
 
 type Geoip struct {
@@ -49,12 +64,10 @@ type Geoip struct {
 	evs.Interruptible
 
 	// GeoIP City database
-	geoipCityFilename string
-	cityDB            *geoip2.Reader
+	cityDB *geoip2.Reader
 
 	// GeoIP ASN database
-	geoipASNFilename string
-	asnDB            *geoip2.Reader
+	asnDB *geoip2.Reader
 
 	// Notify channel, notifies analytic that GeoIP databases have been
 	// updated and should be reloaded
@@ -163,15 +176,6 @@ func NewGeoip(gc *GeoipConfig) *Geoip {
 
 	g.notif = make(chan bool)
 	go g.updater()
-
-	// Database filenames are environment variables.
-	var ok bool
-	if g.geoipCityFilename, ok = os.LookupEnv("GEOIP_DB"); !ok {
-		g.geoipCityFilename = "GeoLite2-City.mmdb"
-	}
-	if g.geoipASNFilename, ok = os.LookupEnv("GEOIP_ASN_DB"); !ok {
-		g.geoipASNFilename = "GeoLite2-ASN.mmdb"
-	}
 
 	// Open databases.
 	g.openGeoIP()
