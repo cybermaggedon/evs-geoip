@@ -11,7 +11,8 @@ package main
 
 import (
 	"encoding/binary"
-	evs "github.com/cybermaggedon/evs-golang-api"
+	"github.com/cybermaggedon/evs-golang-api"
+	pb "github.com/cybermaggedon/evs-golang-api/protos"
 	"github.com/oschwald/geoip2-golang"
 	"github.com/prometheus/client_golang/prometheus"
 	"log"
@@ -19,19 +20,34 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
-	"strings"
 	"time"
 )
 
 const (
 	// How often to update GeoIP data.
-	updatePeriod = 86400 * time.Second
+	defaultUpdatePeriod = 86400 * time.Second
 )
 
-type GeoIP struct {
+type GeoipConfig struct {
+	UpdatePeriod time.Duration
+	*evs.Config
+}
+
+func NewGeoipConfig() *GeoipConfig {
+	return &GeoipConfig{
+		Config: evs.NewConfig("evs-geoip", "cyberprobe"),
+		UpdatePeriod: defaultUpdatePeriod,
+	}
+}
+
+type Geoip struct {
+
+	*GeoipConfig
 
 	// Embed EventAnalytic framework
-	evs.EventAnalytic
+	*evs.EventSubscriber
+	*evs.EventProducer
+	evs.Interruptible
 
 	// GeoIP City database
 	geoipCityFilename string
@@ -51,9 +67,9 @@ type GeoIP struct {
 }
 
 // Goroutine: GeoIP updater.  Periodically runs geoipupdate.
-func (g *GeoIP) updater() {
+func (g *Geoip) updater() {
 
-	var waitTime = updatePeriod
+	var waitTime = g.UpdatePeriod
 
 	for {
 
@@ -81,7 +97,7 @@ func (g *GeoIP) updater() {
 		log.Print("GeoIP updated, success.")
 
 		// On successful update, wait period is a long period.
-		waitTime = updatePeriod
+		waitTime = g.UpdatePeriod
 
 		// Ping the main goroutine, so it knows to reopen the
 		// GeoIP database.
@@ -92,7 +108,7 @@ func (g *GeoIP) updater() {
 }
 
 // Open GeoIP databases.
-func (s *GeoIP) openGeoIP() {
+func (s *Geoip) openGeoIP() {
 
 	log.Print("Opening GeoIP databases")
 
@@ -129,9 +145,25 @@ func (s *GeoIP) openGeoIP() {
 }
 
 // Initialisation
-func (g *GeoIP) Init(binding string, outputs []string) error {
+func NewGeoip(gc *GeoipConfig) *Geoip {
+
+	g := &Geoip{ GeoipConfig: gc }
+
+	var err error
+	g.EventSubscriber, err = evs.NewEventSubscriber(g.Name, g.Input, g)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	g.EventProducer, err = evs.NewEventProducer(g.Name, g.Outputs)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	g.RegisterStop(g)
 
 	g.notif = make(chan bool)
+	go g.updater()
 
 	// Database filenames are environment variables.
 	var ok bool
@@ -160,14 +192,12 @@ func (g *GeoIP) Init(binding string, outputs []string) error {
 	prometheus.MustRegister(g.match_cases)
 	prometheus.MustRegister(g.countries)
 
-	g.EventAnalytic.Init(binding, outputs, g)
-
-	return nil
+	return g
 
 }
 
 // GeoIP lookup
-func (g *GeoIP) lookup(ip net.IP) (*evs.Locations_Location, error) {
+func (g *Geoip) lookup(ip net.IP) (*pb.Locations_Location, error) {
 
 	// Lookup in GeoIP database.
 	var city *geoip2.City
@@ -194,7 +224,7 @@ func (g *GeoIP) lookup(ip net.IP) (*evs.Locations_Location, error) {
 	}
 
 	// Get data from GeoIP record.
-	locn := &evs.Locations_Location{}
+	locn := &pb.Locations_Location{}
 
 	if city != nil {
 		locn.City = city.City.Names["en"]
@@ -238,7 +268,7 @@ func bytesToIp(b []byte) net.IP {
 }
 
 // Event handler for new events.
-func (g *GeoIP) Event(ev *evs.Event, properties map[string]string) error {
+func (g *Geoip) Event(ev *pb.Event, properties map[string]string) error {
 
 	// If there's a signal from the GeoIP database updater, re-open the
 	// database.
@@ -254,22 +284,22 @@ func (g *GeoIP) Event(ev *evs.Event, properties map[string]string) error {
 	var src, dest net.IP
 
 	for _, addr := range ev.Src {
-		if addr.Protocol == evs.Protocol_ipv4 {
+		if addr.Protocol == pb.Protocol_ipv4 {
 			src = int32ToIp(addr.Address.GetIpv4())
 			break
 		}
-		if addr.Protocol == evs.Protocol_ipv6 {
+		if addr.Protocol == pb.Protocol_ipv6 {
 			src = bytesToIp(addr.Address.GetIpv6())
 			break
 		}
 	}
 
 	for _, addr := range ev.Dest {
-		if addr.Protocol == evs.Protocol_ipv4 {
+		if addr.Protocol == pb.Protocol_ipv4 {
 			dest = int32ToIp(addr.Address.GetIpv4())
 			break
 		}
-		if addr.Protocol == evs.Protocol_ipv6 {
+		if addr.Protocol == pb.Protocol_ipv6 {
 			dest = bytesToIp(addr.Address.GetIpv6())
 			break
 		}
@@ -282,7 +312,7 @@ func (g *GeoIP) Event(ev *evs.Event, properties map[string]string) error {
 	// If we get either a source or destination location, store the
 	// information in the event record.
 	if srcloc != nil || destloc != nil {
-		ev.Location = &evs.Locations{}
+		ev.Location = &pb.Locations{}
 		if srcloc != nil {
 			ev.Location.Src = srcloc
 		}
@@ -320,7 +350,7 @@ func (g *GeoIP) Event(ev *evs.Event, properties map[string]string) error {
 		}).Inc()
 	}
 
-	g.OutputEvent(ev, properties)
+	g.Output(ev, properties)
 
 	return nil
 
@@ -328,29 +358,13 @@ func (g *GeoIP) Event(ev *evs.Event, properties map[string]string) error {
 
 func main() {
 
-	g := &GeoIP{}
-	// Notification channel.  A bool gets sent down the channel every time
-	// the updater goroutine inovkes an update.
-	g.notif = make(chan bool, 2)
+	gc := NewGeoipConfig()
 
-	// Launch updater goroutine
-	go g.updater()
-
-	binding, ok := os.LookupEnv("INPUT")
-	if !ok {
-		binding = "cyberprobe"
-	}
-
-	out, ok := os.LookupEnv("OUTPUT")
-	if !ok {
-		g.Init(binding, []string{"geo"})
-	} else {
-		outarray := strings.Split(out, ",")
-		g.Init(binding, outarray)
-	}
+	g := NewGeoip(gc)
 
 	log.Print("Initialisation complete")
 
 	g.Run()
+	log.Print("Shutdown.")
 
 }
