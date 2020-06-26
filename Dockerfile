@@ -6,9 +6,6 @@ RUN dnf install -y geoipupdate && \
 
 COPY evs-geoip /usr/local/bin/
 
-COPY GeoLite2-City.mmdb /usr/local/share/
-COPY GeoLite2-ASN.mmdb /usr/local/share/
-
 WORKDIR /usr/local/share/
 
 ENV PULSAR_BROKER=pulsar://exchange:6650
