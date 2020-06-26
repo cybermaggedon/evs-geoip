@@ -50,8 +50,8 @@ The following environment variables are used to configure:
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `INPUT` | Specifies the Pulsar topic to subscribe to.  This is just the topic part of the URL e.g. `cyberprobe`. By default the input is `geo` which is the output  of the `evs-geoip` analytic. | `geo` |
-| `OUTPUT` | Specifies a comma-separated list of Pulsar topics to publish annotated events to.  This is just the topic part of the URL e.g. `ioc`. By default, the output is an empty list which  isn't useful (FIXME). | `` |
+| `INPUT` | Specifies the Pulsar topic to subscribe to.  This is just the topic part of the URL e.g. `cyberprobe`. By default the input is `cyberprobe` which is the output  of `cybermon`. | `cyberprobe` |
+| `OUTPUT` | Specifies a comma-separated list of Pulsar topics to publish annotated events to.  This is just the topic part of the URL e.g. `geo`. By default, the output is an empty list which  isn't useful (FIXME). | `` |
 | `GEOIP_DB` | Specifies a filename of the GeoIP city database.  | |
 | `GEOIP_ASN_DB` | Specifies a filename of the GeoIP ASN database.  | |
 | `METRICS_PORT` | Specifies the port number to serve Prometheus metrics on.  If not set, metrics will not be served. The container has a default setting of 8088. | `8088` |
