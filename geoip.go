@@ -37,8 +37,10 @@ type GeoipConfig struct {
 
 func NewGeoipConfig() *GeoipConfig {
 
+	base := evs.NewConfig("evs-geoip", "cyberprobe", []string{"withloc"})
+
 	c := &GeoipConfig{
-		Config:       evs.NewConfig("evs-geoip", "cyberprobe"),
+		Config:       base,
 		UpdatePeriod: defaultUpdatePeriod,
 	}
 
