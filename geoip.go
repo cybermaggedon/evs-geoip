@@ -164,12 +164,12 @@ func NewGeoip(gc *GeoipConfig) *Geoip {
 	g := &Geoip{GeoipConfig: gc}
 
 	var err error
-	g.EventSubscriber, err = evs.NewEventSubscriber(g.Name, g.Input, g)
+	g.EventSubscriber, err = evs.NewEventSubscriber(g, g)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	g.EventProducer, err = evs.NewEventProducer(g.Name, g.Outputs)
+	g.EventProducer, err = evs.NewEventProducer(g)
 	if err != nil {
 		log.Fatal(err)
 	}
